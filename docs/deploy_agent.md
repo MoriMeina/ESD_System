@@ -285,7 +285,7 @@ curl -X POST http://controller:8000/api/v1/agents/ \
   "data": {
     "id": "uuid-agent-id",
     "name": "VPC-A Scanner",
-    "token": "secret_token_xxxxx",  // ← 保存此Token
+    "token": "secret_token_xxxxx",
     "status": "offline"
   }
 }
