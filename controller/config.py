@@ -22,11 +22,11 @@ WORKERS: int = int(os.getenv("ASDP_WORKERS", "4"))
 # ============================================================
 # PostgreSQL 配置
 # ============================================================
-POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-POSTGRES_DB: str = os.getenv("POSTGRES_DB", "asdp")
-POSTGRES_USER: str = os.getenv("POSTGRES_USER", "asdp")
-POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "asdp")
+POSTGRES_HOST: str = os.getenv("PG_HOST", os.getenv("POSTGRES_HOST", "localhost"))
+POSTGRES_PORT: int = int(os.getenv("PG_PORT", os.getenv("POSTGRES_PORT", "5432")))
+POSTGRES_DB: str = os.getenv("PG_DB", os.getenv("POSTGRES_DB", "asdp"))
+POSTGRES_USER: str = os.getenv("PG_USER", os.getenv("POSTGRES_USER", "asdp"))
+POSTGRES_PASSWORD: str = os.getenv("PG_PASSWORD", os.getenv("POSTGRES_PASSWORD", "asdp"))
 
 DATABASE_URL: str = (
     f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
@@ -36,17 +36,17 @@ DATABASE_URL: str = (
 # ============================================================
 # ClickHouse 配置
 # ============================================================
-CLICKHOUSE_HOST: str = os.getenv("CLICKHOUSE_HOST", "localhost")
-CLICKHOUSE_PORT: int = int(os.getenv("CLICKHOUSE_PORT", "8123"))
-CLICKHOUSE_DB: str = os.getenv("CLICKHOUSE_DB", "asdp")
-CLICKHOUSE_USER: str = os.getenv("CLICKHOUSE_USER", "default")
-CLICKHOUSE_PASSWORD: str = os.getenv("CLICKHOUSE_PASSWORD", "")
+CLICKHOUSE_HOST: str = os.getenv("CH_HOST", os.getenv("CLICKHOUSE_HOST", "localhost"))
+CLICKHOUSE_PORT: int = int(os.getenv("CH_PORT", os.getenv("CLICKHOUSE_PORT", "8123")))
+CLICKHOUSE_DB: str = os.getenv("CH_DB", os.getenv("CLICKHOUSE_DB", "asdp"))
+CLICKHOUSE_USER: str = os.getenv("CH_USER", os.getenv("CLICKHOUSE_USER", "default"))
+CLICKHOUSE_PASSWORD: str = os.getenv("CH_PASSWORD", os.getenv("CLICKHOUSE_PASSWORD", ""))
 
 # ============================================================
 # Redis 配置
 # ============================================================
-REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_HOST: str = os.getenv("REDIS_HOST", os.getenv("CH_REDIS_HOST", "localhost"))
+REDIS_PORT: int = int(os.getenv("REDIS_PORT", os.getenv("CH_REDIS_PORT", "6379")))
 REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
 REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD") or None
 

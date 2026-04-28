@@ -16,6 +16,11 @@ from controller.config import (
     CLICKHOUSE_DB,
     CLICKHOUSE_USER,
     CLICKHOUSE_PASSWORD,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+    POSTGRES_PASSWORD,
 )
 
 # ============================================================
@@ -29,7 +34,12 @@ async def get_pg_pool() -> asyncpg.Pool:
     global _pg_pool
     if _pg_pool is None or _pg_pool.is_closed():
         _pg_pool = await asyncpg.create_pool(
-            databasetimeout=10,
+            database=POSTGRES_DB,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            timeout=10,
             min_size=5,
             max_size=20,
         )
