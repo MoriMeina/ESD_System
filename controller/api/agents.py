@@ -19,6 +19,40 @@ router = APIRouter()
 
 
 # ============================================================
+# 辅助函数
+# ============================================================
+
+async def resolve_agent_id(agent_id: str) -> dict:
+    """
+    解析 agent_id，支持 UUID 和字符串格式。
+    先尝试按 UUID 匹配 id 字段，再尝试按名称匹配 name 字段。
+    """
+    # 尝试按 UUID 查找
+    try:
+        uuid_id = UUID(agent_id)
+        agent = await AgentStorage.get_agent(uuid_id)
+        if agent:
+            return agent
+    except (ValueError, AttributeError):
+        pass
+
+    # 尝试按名称查找
+    async with pg_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM agents WHERE name = $1",
+            agent_id,
+        )
+        if row:
+            return dict(row)
+
+    raise HTTPException(status_code=404, detail=f"Agent not found: {agent_id}")
+
+
+# 导入 pg_connection
+from controller.database import pg_connection
+
+
+# ============================================================
 # Agent CRUD
 # ============================================================
 
@@ -55,34 +89,26 @@ async def list_agents(status: Optional[str] = None):
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
-async def get_agent(agent_id: UUID):
-    """获取Agent详情"""
-    agent = await AgentStorage.get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+async def get_agent(agent_id: str):
+    """获取Agent详情（支持 UUID 或名称）"""
+    agent = await resolve_agent_id(agent_id)
     return AgentResponse(**agent)
 
 
 @router.post("/{agent_id}/disable")
-async def disable_agent(agent_id: UUID):
-    """禁用Agent"""
-    agent = await AgentStorage.get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    await AgentStorage.update_status(agent_id, "disabled")
-    return {"message": "Agent disabled", "agent_id": str(agent_id)}
+async def disable_agent(agent_id: str):
+    """禁用Agent（支持 UUID 或名称）"""
+    agent = await resolve_agent_id(agent_id)
+    await AgentStorage.update_status(agent["id"], "disabled")
+    return {"message": "Agent disabled", "agent_id": str(agent["id"])}
 
 
 @router.post("/{agent_id}/enable")
-async def enable_agent(agent_id: UUID):
-    """启用Agent"""
-    agent = await AgentStorage.get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    await AgentStorage.update_status(agent_id, "offline")  # 先设为offline，等心跳后变online
-    return {"message": "Agent enabled", "agent_id": str(agent_id)}
+async def enable_agent(agent_id: str):
+    """启用Agent（支持 UUID 或名称）"""
+    agent = await resolve_agent_id(agent_id)
+    await AgentStorage.update_status(agent["id"], "offline")  # 先设为offline，等心跳后变online
+    return {"message": "Agent enabled", "agent_id": str(agent["id"])}
 
 
 # ============================================================
@@ -91,12 +117,12 @@ async def enable_agent(agent_id: UUID):
 
 @router.post("/{agent_id}/heartbeat")
 async def heartbeat(
-    agent_id: UUID,
+    agent_id: str,
     request: AgentHeartbeatRequest,
     x_agent_token: str = Header(..., alias="X-Agent-Token"),
 ):
     """
-    Agent心跳上报
+    Agent心跳上报（支持 UUID 或名称）
     
     必须通过 X-Agent-Token 请求头认证
     """
@@ -105,16 +131,18 @@ async def heartbeat(
     if not agent:
         raise HTTPException(status_code=401, detail="Invalid agent token")
     
-    if str(agent["id"]) != str(agent_id):
+    # 支持 UUID 和名称两种方式匹配
+    resolved = await resolve_agent_id(agent_id)
+    if str(resolved["id"]) != str(agent["id"]):
         raise HTTPException(status_code=403, detail="Token does not match agent")
     
     # 更新心跳（Redis + PostgreSQL）
-    await QueueService.update_heartbeat(agent_id, request.source_ip)
-    await AgentStorage.update_heartbeat(agent_id, request.source_ip)
+    await QueueService.update_heartbeat(agent["id"], request.source_ip)
+    await AgentStorage.update_heartbeat(agent["id"], request.source_ip)
     
     return {
         "status": "ok",
-        "agent_id": str(agent_id),
+        "agent_id": str(agent["id"]),
     }
 
 
@@ -123,17 +151,15 @@ async def heartbeat(
 # ============================================================
 
 @router.get("/{agent_id}/queue")
-async def get_agent_queue(agent_id: UUID):
-    """获取Agent队列状态"""
-    agent = await AgentStorage.get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+async def get_agent_queue(agent_id: str):
+    """获取Agent队列状态（支持 UUID 或名称）"""
+    agent = await resolve_agent_id(agent_id)
     
-    queue_length = await QueueService.get_queue_length(agent_id)
-    is_online = await QueueService.is_agent_online(agent_id)
+    queue_length = await QueueService.get_queue_length(agent["id"])
+    is_online = await QueueService.is_agent_online(agent["id"])
     
     return {
-        "agent_id": str(agent_id),
+        "agent_id": str(agent["id"]),
         "agent_name": agent["name"],
         "status": agent["status"],
         "is_online": is_online,
