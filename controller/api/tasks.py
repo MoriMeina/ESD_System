@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Header
 
 from controller.models.schemas import (
     ScanTaskCreate, ScanTaskResponse, ScanResultBatch, ScanResultItem,
@@ -209,7 +209,7 @@ async def get_task_progress(task_id: UUID):
 @router.post("/results/report")
 async def report_results(
     batch: ScanResultBatch,
-    x_agent_token: str,
+    x_agent_token: str = Header(..., alias="X-Agent-Token"),
 ):
     """
     Agent上报扫描结果
@@ -284,7 +284,7 @@ async def report_results(
 @router.get("/pull/{agent_id}")
 async def pull_task(
     agent_id: UUID,
-    x_agent_token: str,
+    x_agent_token: str = Header(..., alias="X-Agent-Token"),
 ):
     """
     Agent拉取下一个任务
