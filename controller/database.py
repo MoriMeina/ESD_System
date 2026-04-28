@@ -32,7 +32,7 @@ _pg_pool: Optional[asyncpg.Pool] = None
 async def get_pg_pool() -> asyncpg.Pool:
     """获取PostgreSQL连接池（单例）"""
     global _pg_pool
-    if _pg_pool is None or _pg_pool.is_closed():
+    if _pg_pool is None or _pg_pool.is_closed:
         _pg_pool = await asyncpg.create_pool(
             database=POSTGRES_DB,
             host=POSTGRES_HOST,
@@ -49,7 +49,7 @@ async def get_pg_pool() -> asyncpg.Pool:
 async def close_pg_pool():
     """关闭PostgreSQL连接池"""
     global _pg_pool
-    if _pg_pool and not _pg_pool.is_closed():
+    if _pg_pool and not _pg_pool.is_closed:
         await _pg_pool.close()
 
 

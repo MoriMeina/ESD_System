@@ -283,11 +283,11 @@ async def report_results(
 
 @router.get("/pull/{agent_id}")
 async def pull_task(
-    agent_id: UUID,
+    agent_id: str,
     x_agent_token: str = Header(..., alias="X-Agent-Token"),
 ):
     """
-    Agent拉取下一个任务
+    Agent拉取下一个任务（支持 UUID 或名称）
     
     必须通过 X-Agent-Token 请求头认证
     """
@@ -300,12 +300,12 @@ async def pull_task(
         raise HTTPException(status_code=403, detail="Token does not match agent")
     
     # 从队列弹出任务
-    task_data = await QueueService.pop_task(agent_id)
+    task_data = await QueueService.pop_task(agent["id"])
     
     if task_data:
         # 标记分配为running
         task_uuid = UUID(task_data["task_id"])
-        await TaskStorage.update_assignment(task_uuid, agent_id, "running")
+        await TaskStorage.update_assignment(task_uuid, agent["id"], "running")
     
     return {
         "has_task": task_data is not None,
