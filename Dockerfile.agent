@@ -1,0 +1,17 @@
+# ============================================================
+# Agent Dockerfile
+# ============================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY agent/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy agent code
+COPY agent/ ./agent/
+
+# Agents need raw network access for scanning
+# Note: may need CAP_NET_RAW for SYN scanning
+CMD ["python", "-m", "agent.main"]

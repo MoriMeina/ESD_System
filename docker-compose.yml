@@ -1,0 +1,161 @@
+version: '3.8'
+
+# ============================================================
+# ASDP - 分布式暴露面检测平台 Docker Compose 部署
+# ============================================================
+
+services:
+  # ------------------------------------------------------------
+  # PostgreSQL - 关系型数据存储
+  # ------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: asdp
+      POSTGRES_USER: asdp
+      POSTGRES_PASSWORD: asdp_secure_password_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asdp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdp_net
+
+  # ------------------------------------------------------------
+  # ClickHouse - 扫描结果存储（OLAP 分析）
+  # ------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8-alpine
+    environment:
+      CLICKHOUSE_DB: asdp
+      CLICKHOUSE_USER: asdp
+      CLICKHOUSE_PASSWORD: asdp_secure_password_2024
+    ports:
+      - "8123:8123"  # HTTP
+      - "9000:9000"  # Native
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./init_ch.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdp_net
+
+  # ------------------------------------------------------------
+  # Redis - 任务队列 + 缓存
+  # ------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdp_net
+
+  # ------------------------------------------------------------
+  # Controller - 中心控制端（FastAPI）
+  # ------------------------------------------------------------
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    ports:
+      - "8000:8000"
+    environment:
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: asdp
+      PG_PASSWORD: asdp_secure_password_2024
+      PG_DB: asdp
+      CH_HOST: clickhouse
+      CH_PORT: "8123"
+      CH_USER: asdp
+      CH_PASSWORD: asdp_secure_password_2024
+      CH_DB: asdp
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:8080"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./controller:/app/controller
+      - ./static:/app/static
+    restart: unless-stopped
+    networks:
+      - asdp_net
+
+  # ------------------------------------------------------------
+  # Agent-1 - 扫描节点示例（网络A）
+  # ------------------------------------------------------------
+  agent-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      AGENT_ID: ${AGENT_1_ID:-agent-001}
+      AGENT_TOKEN: ${AGENT_1_TOKEN:-token_agent_1_secret}
+      AGENT_NAME: "Agent-A (Network A)"
+      CONTROLLER_URL: http://controller:8000
+      TCP_MAX_CONCURRENCY: "50"
+      UDP_MAX_CONCURRENCY: "20"
+      RATE_LIMIT: "1000"
+    depends_on:
+      - controller
+    restart: unless-stopped
+    networks:
+      - asdp_net
+
+  # ------------------------------------------------------------
+  # Agent-2 - 扫描节点示例（网络B）
+  # ------------------------------------------------------------
+  agent-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      AGENT_ID: ${AGENT_2_ID:-agent-002}
+      AGENT_TOKEN: ${AGENT_2_TOKEN:-token_agent_2_secret}
+      AGENT_NAME: "Agent-B (Network B)"
+      CONTROLLER_URL: http://controller:8000
+      TCP_MAX_CONCURRENCY: "50"
+      UDP_MAX_CONCURRENCY: "20"
+      RATE_LIMIT: "1000"
+    depends_on:
+      - controller
+    restart: unless-stopped
+    networks:
+      - asdp_net
+
+volumes:
+  pg_data:
+  ch_data:
+  redis_data:
+
+networks:
+  asdp_net:
+    driver: bridge

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASDP - 分布式暴露面检测平台</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <nav class="navbar">
+      <div class="nav-brand">
+        <span class="logo">🛡️</span>
+        <span class="title">ASDP 暴露面检测平台</span>
+      </div>
+      <div class="nav-links">
+        <a href="#" @click="activeTab = 'dashboard'" :class="{ active: activeTab === 'dashboard' }">仪表板</a>
+        <a href="#" @click="activeTab = 'tasks'" :class="{ active: activeTab === 'tasks' }">任务管理</a>
+        <a href="#" @click="activeTab = 'assets'" :class="{ active: activeTab === 'assets' }">资产管理</a>
+        <a href="#" @click="activeTab = 'graph'" :class="{ active: activeTab === 'graph' }">关系图谱</a>
+        <a href="#" @click="activeTab = 'agents'" :class="{ active: activeTab === 'agents' }">Agent管理</a>
+        <a href="#" @click="activeTab = 'export'" :class="{ active: activeTab === 'export' }">数据导出</a>
+      </div>
+    </nav>
+
+    <main class="container">
+      <!-- 仪表板 -->
+      <div v-if="activeTab === 'dashboard'" class="view">
+        <h1>📊 系统概览</h1>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.total_tasks }}</div>
+              <div class="stat-label">总任务数</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🔍</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.total_scans }}</div>
+              <div class="stat-label">总扫描数</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🌐</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.unique_targets }}</div>
+              <div class="stat-label">目标资产</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🤖</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ agents.filter(a => a.status === 'online').length }}/{{ agents.length }}</div>
+              <div class="stat-label">在线Agent</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🔓</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.open_ports }}</div>
+              <div class="stat-label">开放端口</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🛡️</div>
+            <div class="stat-content">
+              <div class="stat-value">{{ stats.filtered_ports }}</div>
+              <div class="stat-label">被过滤端口</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 任务状态分布 -->
+        <div class="panel">
+          <h2>扫描结果分布</h2>
+          <div id="resultChart" class="chart"></div>
+        </div>
+
+        <!-- 最近任务 -->
+        <div class="panel">
+          <h2>最近任务</h2>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>任务名称</th>
+                <th>状态</th>
+                <th>进度</th>
+                <th>目标数</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="task in recentTasks" :key="task.id">
+                <td>{{ task.name }}</td>
+                <td><span class="badge" :class="task.status">{{ task.status }}</span></td>
+                <td>
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: task.progress + '%' }"></div>
+                    <span class="progress-text">{{ task.progress }}%</span>
+                  </div>
+                </td>
+                <td>{{ task.target_ips?.length || 0 }}</td>
+                <td>{{ formatTime(task.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 任务管理 -->
+      <div v-if="activeTab === 'tasks'" class="view">
+        <div class="view-header">
+          <h1>📋 任务管理</h1>
+          <button class="btn btn-primary" @click="showTaskForm = true">+ 创建任务</button>
+        </div>
+
+        <!-- 创建任务表单 -->
+        <div v-if="showTaskForm" class="panel form-panel">
+          <h2>创建扫描任务</h2>
+          <form @submit.prevent="createTask">
+            <div class="form-group">
+              <label>任务名称</label>
+              <input v-model="taskForm.name" type="text" required placeholder="my-scan-task" />
+            </div>
+            <div class="form-group">
+              <label>描述</label>
+              <input v-model="taskForm.description" type="text" placeholder="可选描述" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>目标IP（逗号分隔）</label>
+                <input v-model="taskForm.target_ips" type="text" required placeholder="192.168.1.1,10.0.0.1" />
+              </div>
+              <div class="form-group">
+                <label>端口范围</label>
+                <input v-model="taskForm.port_range" type="text" required placeholder="1-1000" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>协议</label>
+                <select v-model="taskForm.protocol">
+                  <option value="tcp">TCP</option>
+                  <option value="udp">UDP</option>
+                  <option value="both">TCP + UDP</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>扫描类型</label>
+                <select v-model="taskForm.scan_type">
+                  <option value="connect">CONNECT</option>
+                  <option value="syn">SYN</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>超时(ms)</label>
+                <input v-model.number="taskForm.timeout_ms" type="number" />
+              </div>
+              <div class="form-group">
+                <label>最大重试</label>
+                <input v-model.number="taskForm.max_retries" type="number" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>指定Agent（可选）</label>
+              <select v-model="taskForm.agent_ids" multiple class="multi-select">
+                <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }} ({{ a.status }})</option>
+              </select>
+              <small>留空则自动分配所有在线Agent</small>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" :disabled="taskLoading">
+                {{ taskLoading ? '创建中...' : '创建任务' }}
+              </button>
+              <button type="button" class="btn btn-secondary" @click="showTaskForm = false">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 任务列表 -->
+        <div class="panel">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>协议</th>
+                <th>目标</th>
+                <th>端口范围</th>
+                <th>状态</th>
+                <th>进度</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="task in tasks" :key="task.id">
+                <td class="id-cell">{{ task.id.slice(0, 8) }}</td>
+                <td>{{ task.name }}</td>
+                <td><span class="badge badge-protocol">{{ task.protocol }}</span></td>
+                <td>{{ task.target_ips?.length }} IPs</td>
+                <td><code>{{ task.port_range }}</code></td>
+                <td><span class="badge" :class="task.status">{{ task.status }}</span></td>
+                <td>
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: task.progress + '%' }"></div>
+                    <span class="progress-text">{{ task.progress }}%</span>
+                  </div>
+                </td>
+                <td>{{ formatTime(task.created_at) }}</td>
+                <td>
+                  <button class="btn btn-sm" @click="viewTask(task)">详情</button>
+                  <button v-if="task.status === 'running'" class="btn btn-sm btn-danger" @click="cancelTask(task.id)">取消</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 资产管理 -->
+      <div v-if="activeTab === 'assets'" class="view">
+        <div class="view-header">
+          <h1>🌐 资产查询</h1>
+          <div class="search-bar">
+            <input v-model="ipSearchQuery" type="text" placeholder="输入IP查询暴露面..." @keyup.enter="queryIpExposure" />
+            <button class="btn btn-primary" @click="queryIpExposure">查询</button>
+          </div>
+        </div>
+
+        <div v-if="ipExposureData" class="panel">
+          <h2>IP: {{ ipExposureData.ip }}</h2>
+          <div class="exposure-summary">
+            <div class="summary-item">
+              <span class="label">总端口</span>
+              <span class="value">{{ ipExposureData.total_ports }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">开放端口</span>
+              <span class="value text-success">{{ ipExposureData.open_ports }}</span>
+            </div>
+          </div>
+
+          <table class="data-table" v-if="ipExposureData.exposures?.length">
+            <thead>
+              <tr>
+                <th>端口</th>
+                <th>协议</th>
+                <th>状态</th>
+                <th>扫描次数</th>
+                <th>平均延迟</th>
+                <th>探测源</th>
+                <th>最近扫描</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="exp in ipExposureData.exposures" :key="exp.port + exp.protocol">
+                <td><code>{{ exp.port }}</code></td>
+                <td><span class="badge badge-protocol">{{ exp.protocol }}</span></td>
+                <td><span class="badge" :class="exp.status">{{ exp.status }}</span></td>
+                <td>{{ exp.scan_count }}</td>
+                <td>{{ exp.avg_latency?.toFixed(2) || 0 }}ms</td>
+                <td>{{ exp.scanning_agents?.join(', ') || '-' }}</td>
+                <td>{{ exp.last_scanned }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 关系图谱 -->
+      <div v-if="activeTab === 'graph'" class="view">
+        <div class="view-header">
+          <h1>🔗 IP 关系图谱</h1>
+          <div class="search-bar">
+            <input v-model="graphSearchQuery" type="text" placeholder="输入IP查看关系图..." @keyup.enter="queryGraph" />
+            <button class="btn btn-primary" @click="queryGraph">查询</button>
+          </div>
+        </div>
+
+        <div v-if="graphData" class="panel">
+          <div class="graph-summary">
+            <span>节点: {{ graphData.total_nodes }}</span>
+            <span>边: {{ graphData.total_edges }}</span>
+            <span>深度: {{ graphData.depth }}</span>
+          </div>
+          <div id="graphChart" class="graph-chart"></div>
+
+          <h3>关系列表</h3>
+          <table class="data-table" v-if="graphData.edges?.length">
+            <thead>
+              <tr>
+                <th>源IP</th>
+                <th>→</th>
+                <th>目标IP</th>
+                <th>关系类型</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="edge in graphData.edges" :key="edge.id">
+                <td><code>{{ getNodeIp(edge.from) }}</code></td>
+                <td>→</td>
+                <td><code>{{ getNodeIp(edge.to) }}</code></td>
+                <td><span class="badge badge-relation">{{ edge.relation_type }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Agent管理 -->
+      <div v-if="activeTab === 'agents'" class="view">
+        <div class="view-header">
+          <h1>🤖 Agent管理</h1>
+          <button class="btn btn-primary" @click="showAgentForm = true">+ 创建Agent</button>
+        </div>
+
+        <div v-if="showAgentForm" class="panel form-panel">
+          <h2>创建Agent</h2>
+          <form @submit.prevent="createAgent">
+            <div class="form-group">
+              <label>Agent名称</label>
+              <input v-model="agentForm.name" type="text" required />
+            </div>
+            <div class="form-group">
+              <label>描述</label>
+              <input v-model="agentForm.description" type="text" />
+            </div>
+            <div class="form-group">
+              <label>网络区域</label>
+              <input v-model="agentForm.network_zone" type="text" placeholder="vpc-a, dmz, internet..." />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>最大并发</label>
+                <input v-model.number="agentForm.max_concurrency" type="number" />
+              </div>
+              <div class="form-group">
+                <label>速率限制(次/秒)</label>
+                <input v-model.number="agentForm.rate_limit" type="number" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">创建</button>
+              <button type="button" class="btn btn-secondary" @click="showAgentForm = false">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>状态</th>
+                <th>网络区域</th>
+                <th>出口IP</th>
+                <th>并发数</th>
+                <th>速率限制</th>
+                <th>最后心跳</th>
+                <th>Token</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="agent in agents" :key="agent.id">
+                <td>{{ agent.name }}</td>
+                <td><span class="badge" :class="agent.status">{{ agent.status }}</span></td>
+                <td>{{ agent.network_zone || '-' }}</td>
+                <td><code>{{ agent.source_ip || '-' }}</code></td>
+                <td>{{ agent.max_concurrency }}</td>
+                <td>{{ agent.rate_limit }}</td>
+                <td>{{ formatTime(agent.last_heartbeat) }}</td>
+                <td>
+                  <code class="token">{{ agent.token?.slice(0, 12) || 'N/A' }}</code>
+                </td>
+                <td>
+                  <button class="btn btn-sm" :class="agent.status === 'disabled' ? 'btn-success' : 'btn-danger'"
+                          @click="toggleAgent(agent)">
+                    {{ agent.status === 'disabled' ? '启用' : '禁用' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 数据导出 -->
+      <div v-if="activeTab === 'export'" class="view">
+        <h1>📤 数据导出</h1>
+        <div class="panel form-panel">
+          <h2>导出扫描结果</h2>
+          <form @submit.prevent="exportData">
+            <div class="form-row">
+              <div class="form-group">
+                <label>目标IP</label>
+                <input v-model="exportForm.target_ip" type="text" placeholder="可选" />
+              </div>
+              <div class="form-group">
+                <label>导出格式</label>
+                <select v-model="exportForm.format">
+                  <option value="csv">CSV</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>开始时间</label>
+                <input v-model="exportForm.start_time" type="datetime-local" />
+              </div>
+              <div class="form-group">
+                <label>结束时间</label>
+                <input v-model="exportForm.end_time" type="datetime-local" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">导出</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>ASDP - 分布式暴露面检测平台 v1.0.0</p>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
