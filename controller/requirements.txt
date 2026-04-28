@@ -7,10 +7,3 @@ clickhouse-connect>=0.7.0
 httpx>=0.25.0
 pydantic>=2.5.0
 python-dotenv>=1.0.0
-</content>
-
-<write_to_file>
-<path>agent/requirements.txt</path>
-<content># ASDP Agent Dependencies
-httpx>=0.25.0
-pydantic>=2.5.0
